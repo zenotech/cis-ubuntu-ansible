@@ -4,7 +4,7 @@
     command: awk -F':' '($2 == "" ) { print $1 }' /etc/shadow
     register: awk_empty_shadow
     changed_when: False
-    failed_when: awk_empty_shadow.stdout != '' and not lock_shadow_accounts
+    failed_when: awk_empty_shadow.stdout != '' and lock_shadow_accounts == False
     tags:
       - section13
       - section13.1
@@ -13,7 +13,7 @@
     command: passwd -l '{{ item }}'
     with_items:
         awk_empty_shadow.stdout_lines
-    when: lock_shadow_accounts
+    when: lock_shadow_accounts == True
     tags:
       - section13
       - section13.1
@@ -73,7 +73,8 @@
       - section13.6
 
   - name: 13.6.3 Ensure root PATH Integrity (dot in path) (Scored)
-    shell: "echo $PATH | sed -e 's/::/:/' -e 's/:$//' -e 's/:/\\n/g'"
+    shell: "/bin/bash --login -c 'env | grep ^PATH=' | sed -e 's/PATH=//' -e 's/::/:/' -e 's/:$//' -e 's/:/\\n/g'"
+    become: yes
     register: dot_in_path
     changed_when: False
     failed_when: '"." in dot_in_path.stdout_lines'
@@ -84,6 +85,7 @@
   - name: 13.6.4 Ensure root PATH Integrity (Scored)
     file: >
         path='{{ item }}'
+        follow=yes
         state=directory
         owner=root
         mode='o-w,g-w'
@@ -127,6 +129,7 @@
   - name: 13.8.2 Check User Dot File Permissions (Scored)
     file: >
         path='{{ item }}'
+        follow=yes
         mode='o-w,g-w'
     with_items:
         home_dot_files.stdout_lines
@@ -235,18 +238,16 @@
 
   - name: 13.18 Check for Presence of User .netrc Files (stat) (Scored)
     stat: path='{{ item }}/.netrc'
-    with_items: home_users.stdout_lines
+    with_items: '{{ home_users.stdout_lines }}'
     register: netrc_files
     tags:
       - section13
       - section13.18
 
   - name: 13.18 Check for Presence of User .netrc Files (Scored)
-    file: >
-        path='{{ item }}'
-        state=absent
+    debug: msg='Check if {{ item.stat.path}} is needed, and remove otherwise'
     when: item is defined and item.stat.exists == True
-    with_items: netrc_files.results
+    with_items: '{{ netrc_files.results }}'
     tags:
       - section13
       - section13.18
